@@ -4,6 +4,7 @@ import finnhub
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+import time
 
 from secrets import FINNHUB_API_KEY
 
@@ -14,14 +15,23 @@ class ApiCaller(finnhub.Client):
         super().__init__(api_key=api_key)
         self.output_directory = Path(Path(__file__).parent.resolve(), "api_results")
 
-    def get_latest_candle(self, sym: str):
-        yesterday = datetime.today() - timedelta(1)
-        unix_time_yesterday = yesterday.strftime("%s")
+    def get_latest_candle(self, sym: str, res: str = "60") -> pd.DataFrame:
+        """
+        returns the latest candle or candles depending on specified res(olution).
+        default is hourly candles from yesterday, for daily res set res to "D".
+        Returns None if yesterday is not a weekday.
+        """
+        today = datetime.today()
+        today_without_time = datetime(today.year, today.month, today.day)
+        yesterday = today_without_time - timedelta(1)
+        if yesterday.weekday() >= 5:
+            return None
+        unix_time_yesterday = int(time.mktime(yesterday.timetuple()))
         json_data = self.stock_candles(
             symbol=sym,
-            resolution='D',
+            resolution=res,
             _from=unix_time_yesterday,
-            to=datetime.today().strftime("%s")
+            to=int(time.mktime(datetime.today().timetuple()))
         )
         df = pd.DataFrame(json_data,
                           index=None,
@@ -30,6 +40,7 @@ class ApiCaller(finnhub.Client):
                            "s": "status", "v": "volume"}, inplace=True)
         posix_time = pd.to_datetime(df["t"], unit='s')
         df.insert(0, "date", posix_time)
+        return df
 
     def get_candles_for_symbol(self, sym: str, time_from, time_to):
         """ https://finnhub.io/docs/api/stock-candles """
@@ -63,5 +74,5 @@ class ApiCaller(finnhub.Client):
 if __name__ == "__main__":
 
     caller = ApiCaller()
-    caller.get_candles_for_symbol(sym="TSLA", time_from=1609455600, time_to=1640991599)
-    caller.get_latest_candle(sym="TSLA")
+    # caller.get_candles_for_symbol(sym="TSLA", time_from=1609455600, time_to=1640991599)
+    caller.get_latest_candle(sym="TSLA", res="60")
